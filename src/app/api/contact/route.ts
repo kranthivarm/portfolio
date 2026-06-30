@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 /* TODO: Set CONTACT_EMAIL and RESEND_API_KEY in .env.local */
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL || "kranthivarma74@gmail.com";
 
@@ -18,7 +16,7 @@ export async function POST(request: Request) {
       );
     }
 
-    /* In development without RESEND_API_KEY, log and succeed */
+    /* Without RESEND_API_KEY, log to console and succeed */
     if (!process.env.RESEND_API_KEY) {
       console.log("── Contact Form Submission ──");
       console.log(`Name: ${name}`);
@@ -27,6 +25,9 @@ export async function POST(request: Request) {
       console.log("────────────────────────────");
       return NextResponse.json({ success: true });
     }
+
+    /* Lazy-init: only instantiate Resend when actually sending */
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
     await resend.emails.send({
       from: "Portfolio Contact <onboarding@resend.dev>",

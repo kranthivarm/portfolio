@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 
 interface Node {
   x: number;
@@ -17,8 +17,11 @@ export function CursorThreads() {
   const nodesRef = useRef<Node[]>([]);
   const animFrameRef = useRef<number>(0);
   const reducedMotion = useRef(false);
+  const sizeRef = useRef({ w: 0, h: 0 });
+  const [ready, setReady] = useState(false);
 
   const initNodes = useCallback((w: number, h: number) => {
+    if (w === 0 || h === 0) return;
     const spacing = 80;
     const nodes: Node[] = [];
     for (let x = spacing / 2; x < w; x += spacing) {
@@ -36,21 +39,37 @@ export function CursorThreads() {
     nodesRef.current = nodes;
   }, []);
 
+  const setupCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return false;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+
+    if (w === 0 || h === 0) return false;
+
+    sizeRef.current = { w, h };
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.scale(dpr, dpr);
+    initNodes(w, h);
+    return true;
+  }, [initNodes]);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      ctx.scale(dpr, dpr);
-      initNodes(w, h);
+    const { w, h } = sizeRef.current;
+    if (w === 0 || h === 0) {
+      // Canvas not sized yet, try again next frame
+      animFrameRef.current = requestAnimationFrame(draw);
+      return;
     }
 
     ctx.clearRect(0, 0, w, h);
@@ -61,10 +80,24 @@ export function CursorThreads() {
     const connectionRadius = 120;
     const nodes = nodesRef.current;
 
+    if (nodes.length === 0) {
+      animFrameRef.current = requestAnimationFrame(draw);
+      return;
+    }
+
     // Get the CSS variable for accent color
     const accentColor = getComputedStyle(document.documentElement)
       .getPropertyValue("--color-accent")
       .trim() || "#F5A623";
+
+    // Helper to create rgba from hex + alpha
+    const hexToRgba = (hex: string, alpha: number): string => {
+      if (!hex.startsWith("#")) return `rgba(245, 166, 35, ${alpha})`;
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
 
     // Update nodes — pulled toward mouse, spring back to origin
     for (const node of nodes) {
@@ -104,9 +137,7 @@ export function CursorThreads() {
           ctx.beginPath();
           ctx.moveTo(nodes[i].x, nodes[i].y);
           ctx.lineTo(nodes[j].x, nodes[j].y);
-          ctx.strokeStyle = accentColor.startsWith("#")
-            ? `${accentColor}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`
-            : `rgba(245, 166, 35, ${alpha})`;
+          ctx.strokeStyle = hexToRgba(accentColor, alpha);
           ctx.lineWidth = 0.8;
           ctx.stroke();
         }
@@ -125,18 +156,14 @@ export function CursorThreads() {
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = accentColor.startsWith("#")
-        ? `${accentColor}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`
-        : `rgba(245, 166, 35, ${alpha})`;
+      ctx.fillStyle = hexToRgba(accentColor, alpha);
       ctx.fill();
 
       // Glow on close nodes
       if (influence > 0.5) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius * 3, 0, Math.PI * 2);
-        ctx.fillStyle = accentColor.startsWith("#")
-          ? `${accentColor}${Math.round((influence * 0.1) * 255).toString(16).padStart(2, "0")}`
-          : `rgba(245, 166, 35, ${influence * 0.1})`;
+        ctx.fillStyle = hexToRgba(accentColor, influence * 0.1);
         ctx.fill();
       }
     }
@@ -157,18 +184,14 @@ export function CursorThreads() {
         ctx.beginPath();
         ctx.moveTo(mx, my);
         ctx.lineTo(node.x, node.y);
-        ctx.strokeStyle = accentColor.startsWith("#")
-          ? `${accentColor}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`
-          : `rgba(245, 166, 35, ${alpha})`;
+        ctx.strokeStyle = hexToRgba(accentColor, alpha);
         ctx.lineWidth = 1.2;
         ctx.stroke();
       }
 
       // Mouse cursor glow
       const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, 30);
-      gradient.addColorStop(0, accentColor.startsWith("#")
-        ? `${accentColor}20`
-        : "rgba(245, 166, 35, 0.12)");
+      gradient.addColorStop(0, hexToRgba(accentColor, 0.12));
       gradient.addColorStop(1, "transparent");
       ctx.beginPath();
       ctx.arc(mx, my, 30, 0, Math.PI * 2);
@@ -181,10 +204,37 @@ export function CursorThreads() {
     }
   }, [initNodes]);
 
+  /* ── Use ResizeObserver for reliable canvas sizing ─────── */
   useEffect(() => {
     reducedMotion.current = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // ResizeObserver reliably fires once the element has a real layout size,
+    // which fixes the production SSR hydration timing issue where
+    // clientWidth/clientHeight are 0 on first useEffect run.
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setupCanvas();
+          if (!ready) setReady(true);
+        }
+      }
+    });
+    resizeObserver.observe(canvas);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [setupCanvas, ready]);
+
+  /* ── Start draw loop + attach event listeners once ready ── */
+  useEffect(() => {
+    if (!ready) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -226,28 +276,20 @@ export function CursorThreads() {
       animFrameRef.current = requestAnimationFrame(draw);
     }
 
-    const handleResize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = canvas.clientWidth * dpr;
-      canvas.height = canvas.clientHeight * dpr;
-      initNodes(canvas.clientWidth, canvas.clientHeight);
-    };
-    window.addEventListener("resize", handleResize);
-
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
       canvas.removeEventListener("touchmove", handleTouchMove);
       canvas.removeEventListener("touchend", handleTouchEnd);
-      window.removeEventListener("resize", handleResize);
     };
-  }, [draw, initNodes]);
+  }, [ready, draw]);
 
   return (
     <canvas
       ref={canvasRef}
       className="absolute inset-0 w-full h-full pointer-events-auto z-0"
+      style={{ width: "100%", height: "100%" }}
       aria-hidden="true"
     />
   );
