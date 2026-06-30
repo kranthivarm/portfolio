@@ -46,7 +46,6 @@ export function CursorThreads() {
   const mouseRef = useRef({ x: -1000, y: -1000 });
   const nodesRef = useRef<Node[]>([]);
   const animFrameRef = useRef<number>(0);
-  const reducedMotion = useRef(false);
 
   const initNodes = useCallback((w: number, h: number) => {
     const spacing = 80;
@@ -191,16 +190,10 @@ export function CursorThreads() {
       ctx.fill();
     }
 
-    if (!reducedMotion.current) {
-      animFrameRef.current = requestAnimationFrame(draw);
-    }
+    animFrameRef.current = requestAnimationFrame(draw);
   }, [initNodes]);
 
   useEffect(() => {
-    reducedMotion.current = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -208,8 +201,6 @@ export function CursorThreads() {
      * Listen on DOCUMENT for mouse events — not on the canvas.
      * The hero content sits at z-10 above the canvas, so canvas-level
      * listeners never fire. Document-level listeners always work.
-     * We convert clientX/Y to canvas-local coordinates using
-     * getBoundingClientRect each time so it's scroll-safe.
      */
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -241,12 +232,8 @@ export function CursorThreads() {
     document.addEventListener("touchmove", handleTouchMove, { passive: true });
     document.addEventListener("touchend", handleMouseLeaveOrTouchEnd);
 
-    // Start draw loop
-    if (reducedMotion.current) {
-      draw(); // Single frame for reduced motion
-    } else {
-      animFrameRef.current = requestAnimationFrame(draw);
-    }
+    // Start continuous draw loop
+    animFrameRef.current = requestAnimationFrame(draw);
 
     // Handle window resize
     const handleResize = () => {
