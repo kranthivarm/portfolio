@@ -11,6 +11,36 @@ interface Node {
   originY: number;
 }
 
+/* Parse any CSS color to [r, g, b]. Handles #hex and rgb()/rgba(). */
+function parseColor(color: string): [number, number, number] {
+  color = color.trim();
+
+  // Handle hex
+  if (color.startsWith("#")) {
+    const hex = color.length === 4
+      ? `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`
+      : color;
+    return [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
+  }
+
+  // Handle rgb(r, g, b) or rgba(r, g, b, a)
+  const match = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (match) {
+    return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])];
+  }
+
+  // Fallback: amber
+  return [245, 166, 35];
+}
+
+function rgbaStr(rgb: [number, number, number], alpha: number): string {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
 export function CursorThreads() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: -1000, y: -1000 });
@@ -23,14 +53,7 @@ export function CursorThreads() {
     const nodes: Node[] = [];
     for (let x = spacing / 2; x < w; x += spacing) {
       for (let y = spacing / 2; y < h; y += spacing) {
-        nodes.push({
-          x,
-          y,
-          vx: 0,
-          vy: 0,
-          originX: x,
-          originY: y,
-        });
+        nodes.push({ x, y, vx: 0, vy: 0, originX: x, originY: y });
       }
     }
     nodesRef.current = nodes;
@@ -61,25 +84,16 @@ export function CursorThreads() {
     const connectionRadius = 120;
     const nodes = nodesRef.current;
 
-    // Get the CSS variable for accent color
-    const accentColor = getComputedStyle(document.documentElement)
-      .getPropertyValue("--color-accent")
-      .trim() || "#F5A623";
+    // Read accent color — prefer the inline style (set by ThemeProvider) over
+    // the CSS rule value (which may be stale due to Tailwind @theme specificity)
+    const root = document.documentElement;
+    const inlineAccent = root.style.getPropertyValue("--color-accent");
+    const accentRaw = inlineAccent
+      || getComputedStyle(root).getPropertyValue("--color-accent").trim()
+      || "#F5A623";
+    const accent = parseColor(accentRaw);
 
-    // DEBUG: log once to check what's happening
-    if (!canvasRef.current?.dataset.logged) {
-      console.log("[CursorThreads DEBUG]", {
-        canvasW: w, canvasH: h,
-        canvasPixelW: canvas.width, canvasPixelH: canvas.height,
-        dpr,
-        accentColor,
-        nodeCount: nodes.length,
-        reducedMotion: reducedMotion.current,
-      });
-      canvasRef.current!.dataset.logged = "1";
-    }
-
-    // Update nodes — pulled toward mouse, spring back to origin
+    // Update node physics
     for (const node of nodes) {
       const dxMouse = mx - node.x;
       const dyMouse = my - node.y;
@@ -92,10 +106,8 @@ export function CursorThreads() {
       }
 
       // Spring back to origin
-      const dxOrigin = node.originX - node.x;
-      const dyOrigin = node.originY - node.y;
-      node.vx += dxOrigin * 0.03;
-      node.vy += dyOrigin * 0.03;
+      node.vx += (node.originX - node.x) * 0.03;
+      node.vy += (node.originY - node.y) * 0.03;
 
       // Damping
       node.vx *= 0.85;
@@ -105,7 +117,8 @@ export function CursorThreads() {
       node.y += node.vy;
     }
 
-    // Draw threads (connections between nearby nodes)
+    // Draw connections between nearby nodes
+    ctx.lineWidth = 0.8;
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const dx = nodes[i].x - nodes[j].x;
@@ -117,16 +130,13 @@ export function CursorThreads() {
           ctx.beginPath();
           ctx.moveTo(nodes[i].x, nodes[i].y);
           ctx.lineTo(nodes[j].x, nodes[j].y);
-          ctx.strokeStyle = accentColor.startsWith("#")
-            ? `${accentColor}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`
-            : `rgba(245, 166, 35, ${alpha})`;
-          ctx.lineWidth = 0.8;
+          ctx.strokeStyle = rgbaStr(accent, alpha);
           ctx.stroke();
         }
       }
     }
 
-    // Draw nodes
+    // Draw node dots
     for (const node of nodes) {
       const dxMouse = node.x - mx;
       const dyMouse = node.y - my;
@@ -138,18 +148,14 @@ export function CursorThreads() {
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = accentColor.startsWith("#")
-        ? `${accentColor}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`
-        : `rgba(245, 166, 35, ${alpha})`;
+      ctx.fillStyle = rgbaStr(accent, alpha);
       ctx.fill();
 
       // Glow on close nodes
       if (influence > 0.5) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius * 3, 0, Math.PI * 2);
-        ctx.fillStyle = accentColor.startsWith("#")
-          ? `${accentColor}${Math.round((influence * 0.1) * 255).toString(16).padStart(2, "0")}`
-          : `rgba(245, 166, 35, ${influence * 0.1})`;
+        ctx.fillStyle = rgbaStr(accent, influence * 0.1);
         ctx.fill();
       }
     }
@@ -165,24 +171,20 @@ export function CursorThreads() {
         .sort((a, b) => a.dist - b.dist)
         .slice(0, 6);
 
+      ctx.lineWidth = 1.2;
       for (const { node, dist } of sortedByDist) {
         const alpha = (1 - dist / influenceRadius) * 0.35;
         ctx.beginPath();
         ctx.moveTo(mx, my);
         ctx.lineTo(node.x, node.y);
-        ctx.strokeStyle = accentColor.startsWith("#")
-          ? `${accentColor}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`
-          : `rgba(245, 166, 35, ${alpha})`;
-        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = rgbaStr(accent, alpha);
         ctx.stroke();
       }
 
       // Mouse cursor glow
       const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, 30);
-      gradient.addColorStop(0, accentColor.startsWith("#")
-        ? `${accentColor}20`
-        : "rgba(245, 166, 35, 0.12)");
-      gradient.addColorStop(1, "transparent");
+      gradient.addColorStop(0, rgbaStr(accent, 0.15));
+      gradient.addColorStop(1, "rgba(0,0,0,0)");
       ctx.beginPath();
       ctx.arc(mx, my, 30, 0, Math.PI * 2);
       ctx.fillStyle = gradient;
@@ -202,57 +204,68 @@ export function CursorThreads() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    /*
+     * Listen on DOCUMENT for mouse events — not on the canvas.
+     * The hero content sits at z-10 above the canvas, so canvas-level
+     * listeners never fire. Document-level listeners always work.
+     * We convert clientX/Y to canvas-local coordinates using
+     * getBoundingClientRect each time so it's scroll-safe.
+     */
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
-      mouseRef.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-    };
-
-    const handleMouseLeave = () => {
-      mouseRef.current = { x: -1000, y: -1000 };
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+        mouseRef.current = { x, y };
+      } else {
+        mouseRef.current = { x: -1000, y: -1000 };
+      }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       if (e.touches.length > 0) {
         const rect = canvas.getBoundingClientRect();
-        mouseRef.current = {
-          x: e.touches[0].clientX - rect.left,
-          y: e.touches[0].clientY - rect.top,
-        };
+        const x = e.touches[0].clientX - rect.left;
+        const y = e.touches[0].clientY - rect.top;
+        if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+          mouseRef.current = { x, y };
+        }
       }
     };
 
-    const handleTouchEnd = () => {
+    const handleMouseLeaveOrTouchEnd = () => {
       mouseRef.current = { x: -1000, y: -1000 };
     };
 
-    canvas.addEventListener("mousemove", handleMouseMove);
-    canvas.addEventListener("mouseleave", handleMouseLeave);
-    canvas.addEventListener("touchmove", handleTouchMove, { passive: true });
-    canvas.addEventListener("touchend", handleTouchEnd);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("touchmove", handleTouchMove, { passive: true });
+    document.addEventListener("touchend", handleMouseLeaveOrTouchEnd);
 
+    // Start draw loop
     if (reducedMotion.current) {
-      draw();
+      draw(); // Single frame for reduced motion
     } else {
       animFrameRef.current = requestAnimationFrame(draw);
     }
 
+    // Handle window resize
     const handleResize = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = canvas.clientWidth * dpr;
-      canvas.height = canvas.clientHeight * dpr;
-      initNodes(canvas.clientWidth, canvas.clientHeight);
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.scale(dpr, dpr);
+      initNodes(w, h);
     };
     window.addEventListener("resize", handleResize);
 
     return () => {
       cancelAnimationFrame(animFrameRef.current);
-      canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("mouseleave", handleMouseLeave);
-      canvas.removeEventListener("touchmove", handleTouchMove);
-      canvas.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleMouseLeaveOrTouchEnd);
       window.removeEventListener("resize", handleResize);
     };
   }, [draw, initNodes]);
@@ -260,7 +273,7 @@ export function CursorThreads() {
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 w-full h-full pointer-events-auto z-0"
+      className="absolute inset-0 w-full h-full z-0"
       aria-hidden="true"
     />
   );

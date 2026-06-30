@@ -23,8 +23,8 @@ export function Hero() {
       <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-accent/3 rounded-full blur-[100px] pointer-events-none" style={{ zIndex: 1 }} />
 
       {/* Content */}
-      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center pointer-events-none">
-        {/* pointer-events-none on content so canvas beneath receives mouse events */}
+      {/* Content */}
+      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
