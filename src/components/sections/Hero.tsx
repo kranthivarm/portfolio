@@ -13,17 +13,18 @@ export function Hero() {
       className="relative min-h-screen flex items-center justify-center overflow-hidden"
     >
       {/* Thread-based interactive background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" style={{ zIndex: 0 }}>
         <CursorThreads />
       </div>
 
-      {/* Gradient overlays for depth */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-base/20 to-base pointer-events-none" />
-      <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-accent/3 rounded-full blur-[100px] pointer-events-none" />
+      {/* Gradient overlays for depth — kept light so threads show through */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-base/50 pointer-events-none" style={{ zIndex: 1 }} />
+      <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] pointer-events-none" style={{ zIndex: 1 }} />
+      <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-accent/3 rounded-full blur-[100px] pointer-events-none" style={{ zIndex: 1 }} />
 
       {/* Content */}
-      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
+      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center pointer-events-none">
+        {/* pointer-events-none on content so canvas beneath receives mouse events */}
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -70,8 +71,9 @@ export function Hero() {
           One person, full-team output.
         </motion.p>
 
+
         <motion.div
-          className="flex flex-col sm:flex-row items-center justify-center gap-4"
+          className="flex flex-col sm:flex-row items-center justify-center gap-4 pointer-events-auto"
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.8 }}
