@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SectionWrapper } from "@/components/ui/SectionWrapper";
 import { Badge } from "@/components/ui/Badge";
@@ -29,20 +29,23 @@ function FilterBar({
           role="tab"
           aria-selected={active === f}
           onClick={() => onSelect(f)}
-          className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 cursor-pointer ${
+          className={`relative px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 cursor-pointer overflow-hidden ${
             active === f
               ? "bg-accent text-base shadow-lg shadow-accent/20"
-              : "bg-surface-elevated text-text-secondary hover:text-text-primary hover:bg-border-hover"
+              : "bg-surface-elevated text-text-secondary hover:text-text-primary"
           }`}
         >
-          {filterLabels[f]}
+          {active !== f && (
+            <span className="absolute inset-0 bg-accent/0 hover:bg-accent/10 transition-colors duration-300 rounded-full" />
+          )}
+          <span className="relative z-10">{filterLabels[f]}</span>
         </button>
       ))}
     </div>
   );
 }
 
-/* ── Project Card ─────────────────────────────────────────── */
+/* ── Tilt Project Card ────────────────────────────────────── */
 function ProjectCard({
   project,
   onClick,
@@ -50,78 +53,119 @@ function ProjectCard({
   project: ProjectType;
   onClick: () => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rotateX = ((y - centerY) / centerY) * -8;
+    const rotateY = ((x - centerX) / centerX) * 8;
+    setTilt({ rotateX, rotateY });
+  };
+
+  const handleMouseLeave = () => {
+    setTilt({ rotateX: 0, rotateY: 0 });
+  };
+
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.35 }}
-      className="glass-card overflow-hidden group cursor-pointer"
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      aria-label={`View details for ${project.name}`}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
+      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: -20 }}
+      transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="tilt-card"
     >
-      {/* Image placeholder */}
-      <div className="relative h-48 bg-gradient-to-br from-surface-elevated to-surface overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-display font-bold text-3xl text-accent/20 group-hover:text-accent/40 transition-colors duration-300">
-            {project.name}
+      <motion.div
+        ref={cardRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        animate={{
+          rotateX: tilt.rotateX,
+          rotateY: tilt.rotateY,
+        }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        className="glass-card overflow-hidden group cursor-pointer tilt-card-inner"
+        onClick={onClick}
+        role="button"
+        tabIndex={0}
+        aria-label={`View details for ${project.name}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+      >
+        {/* Image placeholder with gradient */}
+        <div className="relative h-48 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-surface-elevated to-surface" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <motion.span
+              className="font-display font-bold text-3xl text-accent/15 group-hover:text-accent/30 transition-all duration-500"
+              whileHover={{ scale: 1.05 }}
+            >
+              {project.name}
+            </motion.span>
+          </div>
+          {/* Category badge */}
+          <span className="absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-semibold bg-base/70 backdrop-blur-sm text-text-secondary border border-glass-border">
+            {project.categoryLabel}
           </span>
-        </div>
-        {/* Category badge */}
-        <span className="absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-semibold bg-base/70 backdrop-blur-sm text-text-secondary border border-glass-border">
-          {project.categoryLabel}
-        </span>
-      </div>
-
-      {/* Content */}
-      <div className="p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-display font-semibold text-lg text-text-primary group-hover:text-accent transition-colors">
-            {project.name}
-          </h3>
-          <svg
-            className="w-5 h-5 text-text-muted group-hover:text-accent transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 flex-shrink-0 mt-1"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M5 15L15 5M15 5H8M15 5v7" />
-          </svg>
+          {/* Hover shimmer */}
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/5 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+          </div>
         </div>
 
-        <p className="text-xs text-text-muted font-medium uppercase tracking-wider mb-2">
-          {project.type}
-        </p>
+        {/* Content */}
+        <div className="p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <h3 className="font-display font-semibold text-lg text-text-primary group-hover:text-accent transition-colors duration-300">
+              {project.name}
+            </h3>
+            <motion.svg
+              className="w-5 h-5 text-text-muted group-hover:text-accent flex-shrink-0 mt-1"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              whileHover={{ x: 3, y: -3 }}
+            >
+              <path d="M5 15L15 5M15 5H8M15 5v7" />
+            </motion.svg>
+          </div>
 
-        <p className="text-text-secondary text-sm leading-relaxed mb-4">
-          {project.oneLiner}
-        </p>
+          <p className="text-xs text-text-muted font-medium uppercase tracking-wider mb-2">
+            {project.type}
+          </p>
 
-        <div className="flex flex-wrap gap-1.5">
-          {project.tags.slice(0, 4).map((tag) => (
-            <Badge key={tag} className="text-[11px] px-2 py-0.5">
-              {tag}
-            </Badge>
-          ))}
-          {project.tags.length > 4 && (
-            <span className="text-xs text-text-muted self-center ml-1">
-              +{project.tags.length - 4}
-            </span>
-          )}
+          <p className="text-text-secondary text-sm leading-relaxed mb-4">
+            {project.oneLiner}
+          </p>
+
+          <div className="flex flex-wrap gap-1.5">
+            {project.tags.slice(0, 4).map((tag) => (
+              <Badge key={tag} className="text-[11px] px-2 py-0.5">
+                {tag}
+              </Badge>
+            ))}
+            {project.tags.length > 4 && (
+              <span className="text-xs text-text-muted self-center ml-1">
+                +{project.tags.length - 4}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -236,6 +280,8 @@ export function Projects() {
   return (
     <SectionWrapper id="projects">
       <div className="section-container">
+        <div className="section-divider mb-16" />
+
         <div className="text-center mb-12">
           <p className="section-label justify-center">Projects</p>
           <h2 className="section-title">Work that ships</h2>

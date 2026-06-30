@@ -1,6 +1,7 @@
 "use client";
 
 import { SectionWrapper } from "@/components/ui/SectionWrapper";
+import { GlowCard } from "@/components/ui/Animations";
 import { motion } from "framer-motion";
 
 const services = [
@@ -23,7 +24,6 @@ const services = [
         <rect x="2" y="4" width="24" height="16" rx="2" />
         <path d="M8 24h12" />
         <path d="M14 20v4" />
-        <circle cx="14" cy="12" r="0" fill="currentColor" />
       </svg>
     ),
     title: "Web Platforms",
@@ -80,19 +80,27 @@ const services = [
 const containerVariants = {
   hidden: {},
   visible: {
-    transition: { staggerChildren: 0.1 },
+    transition: { staggerChildren: 0.12 },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+  },
 };
 
 export function Services() {
   return (
     <SectionWrapper id="services">
       <div className="section-container">
+        {/* Subtle section divider */}
+        <div className="section-divider mb-16" />
+
         <div className="text-center mb-16">
           <p className="section-label justify-center">What I Do</p>
           <h2 className="section-title">
@@ -112,24 +120,33 @@ export function Services() {
           whileInView="visible"
           viewport={{ once: true, margin: "-60px" }}
         >
-          {services.map((service) => (
-            <motion.div
-              key={service.title}
-              className="glass-card p-6 sm:p-7 group"
-              variants={itemVariants}
-            >
-              <div className="w-12 h-12 rounded-xl bg-accent-muted text-accent flex items-center justify-center mb-5 group-hover:bg-accent group-hover:text-base transition-colors duration-300">
-                {service.icon}
-              </div>
-              <h3 className="font-display font-semibold text-lg text-text-primary mb-1">
-                {service.title}
-              </h3>
-              <p className="text-accent text-xs font-medium tracking-wider uppercase mb-3">
-                {service.tech}
-              </p>
-              <p className="text-text-secondary text-sm leading-relaxed">
-                {service.description}
-              </p>
+          {services.map((service, i) => (
+            <motion.div key={service.title} variants={itemVariants}>
+              <GlowCard>
+                <div className="p-6 sm:p-7 group">
+                  <motion.div
+                    className="w-12 h-12 rounded-xl bg-accent-muted text-accent flex items-center justify-center mb-5 group-hover:bg-accent group-hover:text-base transition-colors duration-300"
+                    whileHover={{ rotate: [0, -10, 10, 0], scale: 1.1 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    {service.icon}
+                  </motion.div>
+                  <h3 className="font-display font-semibold text-lg text-text-primary mb-1">
+                    {service.title}
+                  </h3>
+                  <p className="text-accent text-xs font-medium tracking-wider uppercase mb-3">
+                    {service.tech}
+                  </p>
+                  <p className="text-text-secondary text-sm leading-relaxed">
+                    {service.description}
+                  </p>
+
+                  {/* Decorative number */}
+                  <span className="absolute top-4 right-5 font-display text-6xl font-bold text-accent/[0.04] pointer-events-none select-none">
+                    0{i + 1}
+                  </span>
+                </div>
+              </GlowCard>
             </motion.div>
           ))}
         </motion.div>
